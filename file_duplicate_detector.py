@@ -111,9 +111,9 @@ class FileDuplicateDetector:
         self.file_tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         file_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
         
-        # 删除选中文件按钮
-        remove_btn = ttk.Button(list_frame, text="删除选中文件", command=self.remove_selected_file)
-        remove_btn.grid(row=1, column=0, pady=(10, 0), sticky=tk.W)
+        # 添加一个按钮用于删除重复文件列表中的选中文件
+        remove_duplicate_btn = ttk.Button(list_frame, text="删除选中重复文件", command=self.remove_selected_duplicate_file)
+        remove_duplicate_btn.grid(row=1, column=0, pady=(10, 0), sticky=tk.W)
         
         # 清理重复文件按钮
         clear_btn = ttk.Button(list_frame, text="清理重复文件", command=self.clear_duplicates)
@@ -425,7 +425,7 @@ class FileDuplicateDetector:
         return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp))
     
     def remove_selected_file(self):
-        """删除选中的文件"""
+        """删除文件列表中选中的文件"""
         selected_items = self.file_tree.selection()
         if not selected_items:
             messagebox.showwarning("警告", "请先选择要删除的文件")
@@ -436,10 +436,14 @@ class FileDuplicateDetector:
             return
             
         # 删除选中的文件
+        deleted_paths = []  # 记录被删除的文件路径
         for item in selected_items:
             # 获取文件路径
             item_values = self.file_tree.item(item, 'values')
             file_path = item_values[1]
+            
+            # 记录被删除的路径
+            deleted_paths.append(file_path)
             
             # 从列表中移除
             self.file_list = [f for f in self.file_list if f['path'] != file_path]
@@ -447,7 +451,106 @@ class FileDuplicateDetector:
             # 从Treeview中移除
             self.file_tree.delete(item)
         
+        # 同时从重复文件列表中移除
+        if self.duplicate_groups:
+            # 更新重复文件组
+            updated_groups = []
+            for group in self.duplicate_groups:
+                # 过滤掉被删除的文件
+                updated_files = [f for f in group['files'] if f['path'] not in deleted_paths]
+                # 只保留还有文件的组
+                if len(updated_files) > 1:  # 至少需要两个文件才能构成重复组
+                    # 更新组ID（重新编号）
+                    updated_group = {
+                        'group_id': len(updated_groups) + 1,
+                        'hash': group['hash'],
+                        'files': updated_files
+                    }
+                    updated_groups.append(updated_group)
+                elif len(updated_files) == 1:
+                    # 如果只剩一个文件，从重复组中移除（不再重复）
+                    pass
+            
+            self.duplicate_groups = updated_groups
+            
+            # 重新显示重复文件列表
+            self._clear_result_tree()
+            for group in self.duplicate_groups:
+                for file_info in group['files']:
+                    self._add_duplicate_to_tree(group['group_id'], file_info)
+        
         self.status_var.set(f"已删除 {len(selected_items)} 个文件")
+    
+    def remove_selected_duplicate_file(self):
+        """删除重复文件列表中选中的文件"""
+        selected_items = self.result_tree.selection()
+        if not selected_items:
+            messagebox.showwarning("警告", "请先选择要删除的重复文件")
+            return
+            
+        # 确认删除
+        if not messagebox.askyesno("确认", "确定要删除选中的重复文件吗？\n注意：这将从磁盘上删除实际文件！"):
+            return
+            
+        # 删除选中的文件
+        deleted_paths = []  # 记录被删除的文件路径
+        for item in selected_items:
+            # 获取文件路径
+            item_values = self.result_tree.item(item, 'values')
+            file_path = item_values[2]  # 路径在第3列（索引2）
+            
+            # 记录被删除的路径
+            deleted_paths.append(file_path)
+            
+            try:
+                # 从磁盘删除文件
+                os.remove(file_path)
+            except Exception as e:
+                messagebox.showerror("错误", f"删除文件时出错: {str(e)}")
+                continue
+        
+        # 从主文件列表中移除
+        self.file_list = [f for f in self.file_list if f['path'] not in deleted_paths]
+        
+        # 从重复文件组中移除
+        if self.duplicate_groups:
+            # 更新重复文件组
+            updated_groups = []
+            for group in self.duplicate_groups:
+                # 过滤掉被删除的文件
+                updated_files = [f for f in group['files'] if f['path'] not in deleted_paths]
+                # 只保留还有文件的组
+                if len(updated_files) > 1:  # 至少需要两个文件才能构成重复组
+                    # 更新组ID（重新编号）
+                    updated_group = {
+                        'group_id': len(updated_groups) + 1,
+                        'hash': group['hash'],
+                        'files': updated_files
+                    }
+                    updated_groups.append(updated_group)
+                elif len(updated_files) == 1:
+                    # 如果只剩一个文件，从重复组中移除（不再重复）
+                    pass
+            
+            self.duplicate_groups = updated_groups
+            
+            # 重新显示重复文件列表
+            self._clear_result_tree()
+            for group in self.duplicate_groups:
+                for file_info in group['files']:
+                    self._add_duplicate_to_tree(group['group_id'], file_info)
+        
+        # 更新文件列表显示
+        self._clear_file_tree()
+        for file_info in self.file_list:
+            self.file_tree.insert("", tk.END, values=(
+                file_info['name'],
+                file_info['path'],
+                file_info['size'],
+                file_info['modified']
+            ))
+        
+        self.status_var.set(f"已删除 {len(selected_items)} 个重复文件")
     
     def calculate_file_hash(self, file_path):
         """计算文件的MD5哈希值"""
