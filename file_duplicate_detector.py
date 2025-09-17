@@ -242,7 +242,7 @@ class FileDuplicateDetector:
                     if self.extension_filters:
                         matched = False
                         for ext in self.extension_filters:
-                            if file.lower().endswith(ext):
+                            if file.lower().endswith(ext.lower()):  # 修复BUG：确保大小写匹配
                                 matched = True
                                 break
                         if not matched:
@@ -287,7 +287,7 @@ class FileDuplicateDetector:
                     if self.extension_filters:
                         matched = False
                         for ext in self.extension_filters:
-                            if file.lower().endswith(ext):
+                            if file.lower().endswith(ext.lower()):  # 修复BUG：确保大小写匹配
                                 matched = True
                                 break
                         if not matched:
