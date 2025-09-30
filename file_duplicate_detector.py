@@ -75,7 +75,7 @@ class FileDuplicateDetector:
         
         # 扩展名筛选
         ttk.Label(file_frame, text="文件扩展名:").grid(row=1, column=0, sticky=tk.W, padx=(0, 5), pady=(5, 0))
-        self.extension_var = tk.StringVar(value=".rar")
+        self.extension_var = tk.StringVar(value=".jpg,.jpeg,.png,.bmp,.webp,.gif,.tif,.psb,.psd,.mp4,.mov,.wmv,.3gp,.avi,.flv")
         # 增加扩展名输入框宽度，支持多个后缀输入
         extension_entry = ttk.Entry(file_frame, textvariable=self.extension_var, width=50)
         extension_entry.grid(row=1, column=1, columnspan=2, sticky=(tk.W, tk.E), padx=(0, 5), pady=(5, 0))
@@ -572,7 +572,7 @@ class FileDuplicateDetector:
             return
             
         # 确认清理
-        if not messagebox.askyesno("确认", f"确定要清理重复文件吗？将保留每组中的第一个文件，删除其余文件。"):
+        if not messagebox.askyesno("确认", f"确定要清理重复文件吗？将优先删除文件名中包含'_*'或'- 副本'的文件。"):
             return
             
         deleted_count = 0
@@ -580,11 +580,26 @@ class FileDuplicateDetector:
         
         self.status_var.set("正在清理重复文件...")
         
-        # 对于每组重复文件，保留第一个，删除其余的
+        # 对于每组重复文件，优先删除包含_*模式或- 副本的文件
         for group in self.duplicate_groups:
             files = group['files']
-            # 保留第一个文件，删除其余文件
-            for file_info in files[1:]:
+            # 筛选包含_*模式或- 副本的文件和不包含这些模式的文件
+            # 匹配文件名中包含字面意义的"_*"字符串或"- 副本"的文件
+            files_with_patterns = [f for f in files if "_*" in f['name'] or "- 副本" in f['name']]
+            files_without_patterns = [f for f in files if "_*" not in f['name'] and "- 副本" not in f['name']]
+            
+            # 确定要保留的文件和要删除的文件
+            if files_without_patterns:
+                # 有不包含指定模式的文件，保留其中第一个，删除其余所有文件（包括包含指定模式的）
+                file_to_keep = files_without_patterns[0]
+                files_to_delete = [f for f in files if f != file_to_keep]
+            else:
+                # 所有文件都包含指定模式，保留第一个文件，删除其余的
+                file_to_keep = files[0]
+                files_to_delete = files[1:]
+            
+            # 删除需要删除的文件
+            for file_info in files_to_delete:
                 try:
                     os.remove(file_info['path'])
                     deleted_count += 1
